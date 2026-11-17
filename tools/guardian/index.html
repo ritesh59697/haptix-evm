@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Haptix Guardian</title>
+  <style>
+    :root { --bg: rgb(244 244 241); --card: #fff; --fg: rgb(23 24 26); --muted: #6b6b66; --line: #0001; --accent: rgb(255 90 31); --warn: rgb(196 30 90); color-scheme: light dark; }
+    @media (prefers-color-scheme: dark) { :root { --bg: rgb(20 21 23); --card: rgb(30 31 34); --fg: rgb(237 237 234); --muted: #9a9a94; --line: #fff2; --accent: rgb(255 106 51); --warn: rgb(255 92 140); } }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, -apple-system, sans-serif; }
+    main { max-width: 560px; margin: 0 auto; padding: 32px 16px 64px; }
+    h1 { font-size: 26px; letter-spacing: -0.02em; margin: 0 0 6px; }
+    h2 { font-size: 13px; margin: 0 0 10px; }
+    p { margin: 0 0 12px; color: var(--muted); }
+    section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-top: 14px; }
+    textarea { width: 100%; min-height: 96px; font: 11px ui-monospace, monospace; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: transparent; color: inherit; }
+    button { font: inherit; font-weight: 600; height: 44px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--line); background: transparent; color: inherit; cursor: pointer; margin: 10px 8px 0 0; }
+    button.primary { background: var(--accent); border-color: transparent; color: rgb(23 24 26); }
+    button.danger { background: var(--warn); border-color: transparent; color: #fff; }
+    button:disabled { opacity: .4; cursor: default; }
+    dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 13px; }
+    dt { color: var(--muted); }
+    dd { margin: 0; text-align: right; font-family: ui-monospace, monospace; font-size: 12px; overflow-wrap: anywhere; }
+    .note { font-size: 12px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); margin-top: 10px; color: var(--muted); }
+    .warn { border-color: var(--warn); color: var(--warn); }
+    .hidden { display: none; }
+    a { color: inherit; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Haptix Guardian</h1>
+  <p>You're someone's guardian. If they lost their keys, they sent you a recovery request from their new device. Starting it begins a wait; when it ends, you finish it and their new keys take over. They can cancel at any time during the wait.</p>
+
+  <section>
+    <h2>1. Paste the request</h2>
+    <textarea id="req" placeholder="eyJ2Ijox…" spellcheck="false" aria-label="Recovery request"></textarea>
+    <button id="load" class="primary">Read request</button>
+    <div id="reqError" class="note warn hidden" role="alert"></div>
+  </section>
+
+  <section id="state" class="hidden">
+    <h2>2. The account</h2>
+    <dl>
+      <dt>Network</dt><dd id="sNet"></dd>
+      <dt>Account</dt><dd id="sAccount"></dd>
+      <dt>Guardian on chain</dt><dd id="sGuardian"></dd>
+      <dt>Recovery wait</dt><dd id="sWait"></dd>
+      <dt>Recovery</dt><dd id="sPending"></dd>
+      <dt>New keys</dt><dd id="sKeys"></dd>
+    </dl>
+    <div id="frozenNote" class="note hidden">The account is frozen, so a recovery can't be finished until the owner unfreezes it.</div>
+  </section>
+
+  <section id="act" class="hidden">
+    <h2>3. Act as guardian</h2>
+    <div id="wallets"></div>
+    <div id="who" class="note hidden"></div>
+    <button id="start" class="primary" disabled>Start recovery</button>
+    <button id="finish" class="primary" disabled>Finish recovery</button>
+    <button id="cancel" class="danger" disabled>Cancel recovery</button>
+    <div id="txNote" class="note hidden" aria-live="polite"></div>
+  </section>
+</main>
+<script type="module">
+  const $ = (id) => document.getElementById(id);
+  const show = (el, on = true) => el.classList.toggle('hidden', !on);
+  const short = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+  const word = (hex, i) => hex.slice(2 + 64 * i, 2 + 64 * (i + 1));
+  // The request is pasted text: build links as elements, and only to http(s) explorers.
+  function explorerLink(kind, id, text) {
+    const base = chain.explorerUrl.replace(/\/?$/, '/');
+    if (!/^https?:\/\//.test(base) || !/^0x[0-9a-fA-F]+$/.test(id)) return document.createTextNode(text);
+    const a = document.createElement('a');
+    a.href = `${base}${kind}/${id}`;
+    a.target = '_blank';
+    a.rel = 'noreferrer';
+    a.textContent = text;
+    return a;
+  }
+  let req = null, chain = null, provider = null, me = null, onChain = null;
+
+  async function read(data) {
+    const res = await fetch(chain.rpcUrl, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to: req.account, data }, 'latest'] }) });
+    const body = await res.json();
+    if (body.error) throw new Error(body.error.message);
+    return body.result;
+  }
+
+  async function refresh() {
+    const [g, wait, pending, frozen] = await Promise.all([read(req.reads.guardian), read(req.reads.recoveryTimelock), read(req.reads.pendingRecovery), read(req.reads.isFrozen)]);
+    onChain = {
+      guardian: '0x' + word(g, 0).slice(24),
+      wait: Number(BigInt('0x' + word(wait, 0))),
+      executeAfter: Number(BigInt('0x' + word(pending, 0))),
+      active: BigInt('0x' + word(pending, 1)) === 1n,
+      hash: '0x' + word(pending, 2),
+      frozen: BigInt('0x' + word(frozen, 0)) === 1n,
+    };
+    const none = /^0x0{40}$/.test(onChain.guardian);
+    $('sGuardian').textContent = none ? 'none (can’t be recovered)' : onChain.guardian;
+    $('sWait').textContent = `${onChain.wait / 3600} hours`;
+    const ours = onChain.active && onChain.hash.toLowerCase() === req.signersHash.toLowerCase();
+    const now = Math.floor(Date.now() / 1000);
+    $('sPending').textContent = !onChain.active ? 'not started'
+      : !ours ? 'started, but for different keys than this request'
+      : onChain.executeAfter > now ? `started; can finish ${new Date(onChain.executeAfter * 1000).toLocaleString()}`
+      : 'wait is over; ready to finish';
+    show($('frozenNote'), onChain.frozen);
+    updateButtons();
+  }
+
+  function updateButtons() {
+    const isGuardian = me && onChain && me.toLowerCase() === onChain.guardian.toLowerCase();
+    const now = Math.floor(Date.now() / 1000);
+    const ours = onChain?.active && onChain.hash.toLowerCase() === req.signersHash.toLowerCase();
+    $('start').disabled = !(isGuardian && !onChain.active);
+    $('finish').disabled = !(me && ours && onChain.executeAfter <= now && !onChain.frozen);
+    $('cancel').disabled = !(isGuardian && onChain.active);
+    if (me) {
+      $('who').textContent = isGuardian ? `Connected as the guardian, ${short(me)}.` : `Connected as ${short(me)}, which isn't this account's guardian. Only the guardian can start or cancel; anyone can finish once the wait is over.`;
+      $('who').classList.toggle('warn', !isGuardian);
+      show($('who'));
+    }
+  }
+
+  $('load').onclick = async () => {
+    show($('reqError'), false);
+    try {
+      req = JSON.parse(atob($('req').value.trim().replace(/-/g, '+').replace(/_/g, '/')));
+      if (req.v !== 1 || !req.account || !req.initiateData) throw new Error('bad shape');
+    } catch {
+      $('reqError').textContent = 'That isn’t a Haptix recovery request. Ask for the whole text from their Restore screen.';
+      return show($('reqError'));
+    }
+    chain = req.chain;
+    $('sNet').textContent = `${chain.name} (${chain.id})`;
+    if (!/^0x[0-9a-fA-F]{40}$/.test(req.account) || !Number.isInteger(chain.id) || !/^https?:\/\//.test(chain.rpcUrl)) {
+      $('reqError').textContent = 'That request has an invalid account or network.';
+      return show($('reqError'));
+    }
+    $('sAccount').replaceChildren(explorerLink('address', req.account, req.account));
+    $('sKeys').textContent = req.keys.map((k, i) => `key ${i + 1}: ${short(k.x)}`).join(', ');
+    show($('state'));
+    show($('act'));
+    try { await refresh(); } catch (e) { $('reqError').textContent = `Couldn’t read the account: ${e.message}`; show($('reqError')); }
+  };
+
+  // Wallets announce themselves over EIP-6963; fall back to window.ethereum.
+  const found = new Map();
+  window.addEventListener('eip6963:announceProvider', (e) => { found.set(e.detail.info.uuid, e.detail); renderWallets(); });
+  window.dispatchEvent(new Event('eip6963:requestProvider'));
+  function renderWallets() {
+    const box = $('wallets');
+    box.innerHTML = '';
+    const list = [...found.values()];
+    if (!list.length && window.ethereum) list.push({ info: { name: 'Browser wallet' }, provider: window.ethereum });
+    if (!list.length) { box.textContent = 'No wallet found in this browser. Install the guardian’s wallet and reload.'; return; }
+    for (const w of list) {
+      const b = document.createElement('button');
+      b.textContent = `Connect ${w.info.name}`;
+      b.onclick = () => connect(w.provider);
+      box.appendChild(b);
+    }
+  }
+  setTimeout(renderWallets, 300);
+
+  async function connect(p) {
+    provider = p;
+    [me] = await p.request({ method: 'eth_requestAccounts' });
+    const want = '0x' + chain.id.toString(16);
+    if ((await p.request({ method: 'eth_chainId' })) !== want) {
+      try {
+        await p.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: want }] });
+      } catch (e) {
+        if (e.code !== 4902) throw e;
+        await p.request({ method: 'wallet_addEthereumChain', params: [{ chainId: want, chainName: chain.name, rpcUrls: [chain.rpcUrl], blockExplorerUrls: [chain.explorerUrl], nativeCurrency: { name: chain.nativeSymbol, symbol: chain.nativeSymbol, decimals: 18 } }] });
+      }
+    }
+    updateButtons();
+  }
+
+  async function send(label, data) {
+    const note = $('txNote');
+    show(note);
+    note.classList.remove('warn');
+    note.textContent = `${label}: confirm in your wallet…`;
+    try {
+      const hash = await provider.request({ method: 'eth_sendTransaction', params: [{ from: me, to: req.account, data }] });
+      note.replaceChildren(document.createTextNode(`${label}: sent. `), explorerLink('tx', hash, 'View transaction'));
+      setTimeout(refresh, 4000);
+    } catch (e) {
+      note.textContent = `${label} failed: ${e.message}`;
+      note.classList.add('warn');
+    }
+  }
+  $('start').onclick = () => send('Start recovery', req.initiateData);
+  $('finish').onclick = () => send('Finish recovery', req.completeData);
+  $('cancel').onclick = () => send('Cancel recovery', req.cancelData);
+</script>
+</body>
+</html>

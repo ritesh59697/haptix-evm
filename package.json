@@ -1,0 +1,17 @@
+{
+  "name": "haptix",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Passkey smart account (ERC-4337) with on-chain agent budgets, for Robinhood Chain and Arbitrum.",
+  "scripts": {
+    "build": "npm run build --prefix extension-app",
+    "type-check": "npm run type-check --prefix extension-app",
+    "test:contracts": "forge test",
+    "test:e2e": "npm run build && node tools/test-dapp/e2e.mjs",
+    "test:e2e:full": "npm run build && node tools/test-dapp/full-flow.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0",
+    "viem": "^2.56.1"
+  }
+}

@@ -1,0 +1,29 @@
+# Foundry build output
+out/
+cache/
+broadcast/
+
+# Secrets. Deploys use an encrypted Foundry keystore (~/.foundry/keystores/),
+# outside this repo. Nothing secret belongs here; fail closed anyway.
+.env
+.env.*
+*.key
+*.pem
+keystore/
+*.keystore
+
+# Local state of the scripts/*-e2e.mjs runs: testnet-only software signer keys and receipts
+.haptix-e2e/
+
+# Node
+node_modules/
+npm-debug.log*
+dist/
+test-results/
+
+# macOS and editors
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*~

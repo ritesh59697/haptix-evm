@@ -1,0 +1,92 @@
+@import '@fontsource/ibm-plex-sans/400.css';
+@import '@fontsource/ibm-plex-sans/500.css';
+@import '@fontsource/ibm-plex-sans/600.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* "Signal" theme. Values are space-separated RGB so Tailwind can add alpha. */
+@layer base {
+  :root {
+    color-scheme: light;
+    --bg: 244 244 241;
+    --card: 255 255 255;
+    --raised: 236 236 232;
+    --line: 220 220 214;
+    --hair: 232 232 227;
+    --faint: 178 178 171;
+    --fg: 23 24 26;
+    --muted: 95 97 104;
+    --accent: 255 90 31;
+    --accent-text: 194 65 12;
+    --on-accent: 23 24 26;
+    --agent: 47 107 255;
+    --on-agent: 255 255 255;
+    --both: 194 24 91;
+    --on-both: 255 255 255;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      color-scheme: dark;
+      --bg: 20 21 23;
+      --card: 29 31 34;
+      --raised: 37 39 43;
+      --line: 48 50 55;
+      --hair: 33 35 38;
+      --faint: 82 84 90;
+      --fg: 237 237 234;
+      --muted: 160 162 168;
+      --accent: 255 106 51;
+      --accent-text: 255 128 84;
+      --on-accent: 23 24 26;
+      --agent: 122 162 255;
+      --on-agent: 23 24 26;
+      --both: 240 98 146;
+      --on-both: 23 24 26;
+    }
+  }
+
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+    --bg: 20 21 23;
+    --card: 29 31 34;
+    --raised: 37 39 43;
+    --line: 48 50 55;
+    --hair: 33 35 38;
+    --faint: 82 84 90;
+    --fg: 237 237 234;
+    --muted: 160 162 168;
+    --accent: 255 106 51;
+    --accent-text: 255 128 84;
+    --on-accent: 23 24 26;
+    --agent: 122 162 255;
+    --on-agent: 23 24 26;
+    --both: 240 98 146;
+    --on-both: 23 24 26;
+  }
+
+  body {
+    @apply m-0 bg-bg font-sans text-fg antialiased;
+    font-variant-numeric: tabular-nums;
+  }
+  /* Chrome sizes the toolbar popup to its content, up to 800x600. */
+  body.popup { width: 360px; height: 600px; overflow: hidden; }
+  body.panel { min-height: 100vh; }
+  :focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: 2px; }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { scrollbar-width: none; }
+  /* Fine measuring grid used behind the welcome mark. */
+  .grid-paper {
+    background-image:
+      linear-gradient(rgb(var(--line) / 0.6) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(var(--line) / 0.6) 1px, transparent 1px);
+    background-size: 16px 16px;
+  }
+}

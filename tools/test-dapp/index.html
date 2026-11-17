@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Haptix test dApp</title>
+  <style>
+    :root { color-scheme: light dark; --line: #8884; --muted: #888; }
+    body { font: 14px/1.5 system-ui, sans-serif; max-width: 640px; margin: 32px auto; padding: 0 16px; }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    p { color: var(--muted); margin: 0 0 20px; }
+    section { border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+    h2 { font-size: 13px; margin: 0 0 10px; text-transform: none; }
+    label { display: block; font-size: 12px; color: var(--muted); margin: 8px 0 4px; }
+    input { width: 100%; box-sizing: border-box; font: 12px ui-monospace, monospace; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; }
+    button { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: inherit; cursor: pointer; margin: 8px 8px 0 0; }
+    pre { font: 12px ui-monospace, monospace; white-space: pre-wrap; word-break: break-all; margin: 0; }
+    #log { max-height: 320px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h1>Haptix test dApp</h1>
+  <p>Finds the wallet with EIP-6963, then exercises the requests a real site makes. Serve it from localhost; the extension doesn't run on file:// pages.</p>
+
+  <section>
+    <h2>Wallet</h2>
+    <pre id="status">Looking for wallets…</pre>
+    <button id="connect">Connect</button>
+    <button id="accounts">eth_accounts</button>
+    <button id="switch">Switch to chain 1 (should fail)</button>
+  </section>
+
+  <section>
+    <h2>Send a transaction</h2>
+    <label for="to">To (empty = your own account)</label>
+    <input id="to" placeholder="0x…">
+    <label for="value">Value in wei (hex or decimal)</label>
+    <input id="value" value="100000000000000">
+    <label for="data">Data</label>
+    <input id="data" value="0x">
+    <button id="send">eth_sendTransaction</button>
+    <button id="approve">Fill: unlimited ERC-20 approve</button>
+  </section>
+
+  <section>
+    <h2>Messages</h2>
+    <button id="sign">personal_sign</button>
+  </section>
+
+  <section>
+    <h2>Log</h2>
+    <pre id="log"></pre>
+  </section>
+
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const log = (label, v) => { $('log').textContent = `${new Date().toLocaleTimeString()}  ${label}: ${typeof v === 'string' ? v : JSON.stringify(v, null, 2)}\n` + $('log').textContent; };
+
+    let provider = null;
+    const wallets = [];
+    window.addEventListener('eip6963:announceProvider', (e) => {
+      wallets.push(e.detail.info.name);
+      if (e.detail.info.rdns === 'xyz.haptixwallet') {
+        provider = e.detail.provider;
+        provider.on('accountsChanged', (a) => log('event accountsChanged', a));
+        provider.on('chainChanged', (c) => log('event chainChanged', c));
+        provider.on('connect', (c) => log('event connect', c));
+      }
+      render();
+    });
+    window.dispatchEvent(new Event('eip6963:requestProvider'));
+
+    let account = null;
+    async function render() {
+      if (!provider) return ($('status').textContent = wallets.length ? `Found ${wallets.join(', ')} but not Haptix.` : 'Haptix not found. Load the extension and reload this page.');
+      const chainId = await provider.request({ method: 'eth_chainId' });
+      const lines = [`Wallets: ${wallets.join(', ')}`, `Chain: ${BigInt(chainId)}`, `Account: ${account ?? 'not connected'}`];
+      if (account) lines.push(`Balance: ${Number(BigInt(await provider.request({ method: 'eth_getBalance', params: [account, 'latest'] }))) / 1e18} ETH`);
+      $('status').textContent = lines.join('\n');
+    }
+
+    const call = async (label, method, params) => {
+      try {
+        const r = await provider.request({ method, params });
+        log(label, r);
+        return r;
+      } catch (e) {
+        log(`${label} error`, { code: e.code, message: e.message });
+      }
+    };
+
+    $('connect').onclick = async () => { const a = await call('eth_requestAccounts', 'eth_requestAccounts'); if (a?.[0]) account = a[0]; render(); };
+    $('accounts').onclick = () => call('eth_accounts', 'eth_accounts');
+    $('switch').onclick = () => call('wallet_switchEthereumChain', 'wallet_switchEthereumChain', [{ chainId: '0x1' }]);
+    $('approve').onclick = () => {
+      // approve(spender = your account, amount = max uint256) on whatever token address is in "To".
+      const spender = (account ?? '0x' + '0'.repeat(40)).slice(2).toLowerCase().padStart(64, '0');
+      $('data').value = '0x095ea7b3' + spender + 'f'.repeat(64);
+      $('value').value = '0';
+    };
+    $('send').onclick = async () => {
+      const v = $('value').value.trim() || '0';
+      const tx = { from: account, to: $('to').value.trim() || account, value: '0x' + BigInt(v).toString(16), data: $('data').value.trim() || '0x' };
+      const hash = await call('eth_sendTransaction', 'eth_sendTransaction', [tx]);
+      if (!hash) return;
+      const receipt = await call('eth_getTransactionReceipt', 'eth_getTransactionReceipt', [hash]);
+      if (receipt) log('receipt status', receipt.status);
+      render();
+    };
+    $('sign').onclick = () => call('personal_sign', 'personal_sign', ['0x68656c6c6f', account]);
+  </script>
+</body>
+</html>
