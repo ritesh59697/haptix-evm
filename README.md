@@ -10,6 +10,8 @@ The user's account is an ERC-4337 smart account controlled by two passkeys. An a
 
 Past the budget, the contract stops the agent. The user can approve that one operation with both passkeys. Revoking an agent takes one action.
 
+**Building an agent?** [`agent-sdk/`](agent-sdk) gives it the budget in a few lines: read what's left, pay, swap, and get an approval request for anything bigger.
+
 It runs on Robinhood Chain testnet and Arbitrum Sepolia. It verifies passkeys natively through the P-256 precompile (RIP-7212), so there is no server key and no off-chain signer service.
 
 > **Status: testnet, unaudited.** See [Limits](#limits) before relying on anything here.
@@ -51,7 +53,8 @@ Batches are priced on their total per asset, so splitting a large send into smal
 | [`extension-app/src/chain/`](extension-app/src/chain) | All chain logic: account, agents, guardian, tokens |
 | [`extension-app/public/inpage.js`](extension-app/public/inpage.js) | EIP-1193 provider, announced over EIP-6963 |
 | [`networks/`](networks) | One `.env` per chain. Every address and limit comes from here; nothing is built into the code. |
-| [`scripts/`](scripts) | Live end-to-end runs against a testnet, plus [`agent-pay.mjs`](scripts/agent-pay.mjs), a minimal agent |
+| [`agent-sdk/`](agent-sdk) | TypeScript SDK for agent builders: budgets, payments, swaps, approval requests |
+| [`scripts/`](scripts) | Live end-to-end runs against a testnet, plus [`agent-pay.mjs`](scripts/agent-pay.mjs), a command-line agent built on the SDK |
 | [`tools/test-dapp/`](tools/test-dapp) | Headless browser suites that drive the real extension with virtual passkeys |
 | [`tools/guardian/`](tools/guardian/index.html) | A single-file page a guardian uses to start or finish a recovery |
 | [`script/`](script) | Foundry deploy scripts, and a testnet-only demo DEX |
@@ -72,6 +75,7 @@ You need [Foundry](https://getfoundry.sh) and Node 22.
 git clone --recurse-submodules https://github.com/ritesh59697/haptix-evm
 cd haptix-evm
 forge test
+npm ci --prefix agent-sdk && npm run test:agent-sdk
 ```
 
 Build the extension and run the headless suite. It loads the extension in Chromium with virtual passkeys, reads the live testnet and sends nothing:
@@ -100,6 +104,7 @@ export DEPLOYER_ACCOUNT=<keystore name>
 | `node scripts/agent-trade-e2e.mjs` | The same for trades through the demo router, plus a trade whose proceeds go elsewhere (rejected) |
 | `node scripts/guardian-e2e.mjs` | Set guardian, freeze, unfreeze, start recovery, early finish refused, cancel |
 | `node scripts/signature-e2e.mjs` | ERC-1271: which messages one key may sign |
+| `npm run build:agent-sdk && node scripts/agent-sdk-e2e.mjs` | The agent SDK: pays, stops at limits, a request approved by the owner, swaps, frozen and revoked refusals |
 | `npm run test:e2e:full` | 33 checks through the real extension screens, with a local bundler |
 
 Each script lists its environment variables at the top.
@@ -150,13 +155,18 @@ All on Robinhood Chain testnet unless noted.
 - [Over budget, with both keys](https://explorer.testnet.chain.robinhood.com/tx/0x6fd4f10ad3e9a324da4f0101aab598d9010773ead3098bf7cad054e2d43a197d).
 - [Revoke](https://explorer.testnet.chain.robinhood.com/tx/0x73cc6add1bacd072517f6f8b5db58bf9ef83fb5eccba9502c796a662616d287e).
 
+**Agent SDK** (`agent-sdk-e2e.mjs`, 2026-11-17, current factory):
+- [Payment within budget, agent key only](https://explorer.testnet.chain.robinhood.com/tx/0x5092be81c0faa8e7e22c99f299d31cd9bebfbdb62233190209095e0abac5d6b0).
+- [An over-limit request, approved by the owner with both passkeys](https://explorer.testnet.chain.robinhood.com/tx/0x2ade34e78f399adbe469ca20a5e80a8fae9c21be650b8f9a8a3aee04e980cc48). The other request on the same nonce was then reported superseded.
+- [Swap within budget](https://explorer.testnet.chain.robinhood.com/tx/0xeab041edb37d1e0ea988eb1f870b3696f519e01d824f499420e9edafc2bc770e).
+
 **Freeze and guardian** (`guardian-e2e.mjs`, 2026-11-07):
 - [Set guardian](https://explorer.testnet.chain.robinhood.com/tx/0x322cdbfd1176f57c35b9976cbacef4181d87d5372b255a3a56d30caf559bf868).
 - [Freeze with one key](https://explorer.testnet.chain.robinhood.com/tx/0xe4ceff22b73ccd555de1743c9ab0817efb31810b65551b48d9ba13c8e5d35f67), and [unfreeze with both](https://explorer.testnet.chain.robinhood.com/tx/0x190aca8d159587f4c667551d3e0eb0442832a54207b5aedc2b36f3b7aef6e38e).
 - [Guardian starts recovery](https://explorer.testnet.chain.robinhood.com/tx/0x4d30cd44db7345169e4839fb9864b6f2eadc1e3a3e07cf010711801d513230b7). An early finish was refused.
 - [Owner cancels with one key](https://explorer.testnet.chain.robinhood.com/tx/0x4ecfa2e326c1eaf8789bd3cb635e790452e2fc79152cde663cb45d3e84f42352).
 
-The spend-limit and trade receipts come from an account made by the current factory. The real-passkey sends, agent payments and guardian receipts come from accounts made by the earlier factory, `0x60319237…146d`. The 2026-11-09 redeploy changed only how signed messages are checked (ERC-1271). Accounts from the earlier factory keep the old one-key rule for signed messages, and the wallet warns about it. The scripts use software P-256 keys that produce real WebAuthn assertions, so the contract runs the same verification path as for Touch ID.
+The spend-limit, trade and agent SDK receipts come from an account made by the current factory. The real-passkey sends, agent payments and guardian receipts come from accounts made by the earlier factory, `0x60319237…146d`. The 2026-11-09 redeploy changed only how signed messages are checked (ERC-1271). Accounts from the earlier factory keep the old one-key rule for signed messages, and the wallet warns about it. The scripts use software P-256 keys that produce real WebAuthn assertions, so the contract runs the same verification path as for Touch ID.
 
 ## Limits
 
@@ -167,6 +177,7 @@ The spend-limit and trade receipts come from an account made by the current fact
 - **Real-passkey testing is partial.** Real Touch ID and phone passkeys were used for sends (above). The agent, guardian, signing and site screens have been tested with virtual passkeys and a local bundler only.
 - **Trading uses a demo router.** No Uniswap deployment is documented on Robinhood Chain testnet, so trades run against [`script/demo/DemoDex.sol`](script/demo/DemoDex.sol) at a fixed price.
 - **No gas sponsorship yet.** The account pays its own gas.
+- **The agent SDK isn't on npm** and has run only through a local test bundler, not a hosted one.
 
 ## License
 

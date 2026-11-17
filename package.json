@@ -8,7 +8,9 @@
     "type-check": "npm run type-check --prefix extension-app",
     "test:contracts": "forge test",
     "test:e2e": "npm run build && node tools/test-dapp/e2e.mjs",
-    "test:e2e:full": "npm run build && node tools/test-dapp/full-flow.mjs"
+    "test:e2e:full": "npm run build && npm run build:agent-sdk && node tools/test-dapp/full-flow.mjs",
+    "build:agent-sdk": "npm run build --prefix agent-sdk",
+    "test:agent-sdk": "npm test --prefix agent-sdk"
   },
   "devDependencies": {
     "playwright": "^1.63.0",
