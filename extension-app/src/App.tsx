@@ -131,13 +131,14 @@ function PanelBody() {
           <ChevronLeft size={18} />All requests
         </button>
       )}
-      <div className="flex flex-1 flex-col"><Screen /></div>
+      {/* min-h-0 + overflow: the screen area scrolls, so tab screens (h-full) keep their tab bar at the bottom. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto"><Screen /></div>
       <Toast />
     </>
   );
 }
 
-/** Side panel: fluid width, scrolls as a page. */
+/** Side panel: fluid width, full window height; the screen area scrolls. */
 export function PanelApp() {
   const w = useWallet();
   // undefined = still checking for a send handed over from the popup.
@@ -153,7 +154,7 @@ export function PanelApp() {
     });
   }, [w.loading]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <div className="relative mx-auto flex min-h-screen max-w-[480px] flex-col">
+    <div className="relative mx-auto flex h-screen max-w-[480px] flex-col">
       {w.loading || handed === undefined ? <Loading /> : (
         <NavProvider
           initial={handed ?? (!w.state ? (w.restore ? { name: 'restore' } : { name: 'welcome' }) : w.dappRequests.length ? routeFor(w.dappRequests[0]) : { name: 'requests' })}

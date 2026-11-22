@@ -1,7 +1,18 @@
+import { formatUnits } from 'viem';
 export const shortAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 /** Fixed decimals, trimmed only by what the caller asks for. */
 export const fmt = (n: number, decimals: number) => n.toFixed(decimals);
+
+/**
+ * An exact on-chain amount for a signing screen: padded to the display decimals, but never
+ * rounded, so the user always sees every digit they are approving.
+ */
+export const fmtExact = (value: bigint, unitDecimals: number, displayDecimals: number) => {
+  const exact = formatUnits(value, unitDecimals);
+  const [whole, frac = ''] = exact.split('.');
+  return frac.length >= displayDecimals ? exact : `${whole}.${frac.padEnd(displayDecimals, '0')}`.replace(/\.$/, '');
+};
 
 /** Decimals for an amount of a token, from the asset list (defaults to 4). */
 export const decimalsFor = (assets: { symbol: string; decimals: number }[], symbol: string) =>

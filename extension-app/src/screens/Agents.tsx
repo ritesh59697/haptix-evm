@@ -4,7 +4,7 @@ import { formatEther, formatUnits, getAddress, isAddress, type Address } from 'v
 import type { Agent, Request, WalletState } from '../data/sample';
 import type { SendStep } from '../chain/account';
 import type { AgentRequest as AgentRequestData } from '../chain/agents';
-import { copyText, decimalsFor, fmt, pct, shortAddr } from '../lib';
+import { copyText, decimalsFor, fmt, fmtExact, pct, shortAddr } from '../lib';
 import { useNav, type Route } from '../nav';
 import { network, useWallet, wallet } from '../wallet';
 import { BottomNav, Btn, Header, Meter, PageTitle, Row, Rows, cx } from '../ui';
@@ -323,7 +323,9 @@ export function AgentApprove({ state, request }: { state: WalletState; request: 
   const s = request.swap;
   const amount = s ? Number(formatUnits(s.amountIn, s.tokenIn.decimals)) : Number(formatEther(request.valueWei));
   const symbol = s ? s.tokenIn.symbol : network.nativeSymbol;
-  const decimals = 6;
+  // The same display decimals as the Agents list, so one budget reads the same on both screens.
+  const decimals = Math.min(decimalsFor(state.assets, symbol), 4);
+  const amountText = s ? fmtExact(s.amountIn, s.tokenIn.decimals, decimals) : fmtExact(request.valueWei, 18, decimals);
   const approve = async () => {
     setError(null);
     try {
@@ -342,7 +344,7 @@ export function AgentApprove({ state, request }: { state: WalletState; request: 
           {done.success ? <Check size={24} strokeWidth={2.5} /> : <TriangleAlert size={22} />}
         </span>
         <div className="mt-4"><PageTitle>{done.success ? 'Approved and paid' : 'It reverted on chain'}</PageTitle></div>
-        <p className="m-0 mt-2 text-[13px] leading-normal text-muted">{done.success ? `${agent.name} ${s ? 'swapped' : 'paid'} ${fmt(amount, decimals)} ${symbol} with your approval. Its budget is unchanged.` : 'Gas was used but the payment failed. The explorer has the details.'}</p>
+        <p className="m-0 mt-2 text-[13px] leading-normal text-muted">{done.success ? `${agent.name} ${s ? 'swapped' : 'paid'} ${amountText} ${symbol} with your approval. Its budget is unchanged.` : 'Gas was used but the payment failed. The explorer has the details.'}</p>
         <a href={w.explorerTx(done.txHash)} target="_blank" rel="noreferrer" className="mt-4 flex h-11 items-center justify-between rounded-btn border border-line bg-card px-3.5 text-[13px] text-fg no-underline hover:bg-raised">
           <span className="font-mono text-xs">{shortAddr(done.txHash)}</span>
           <span className="flex items-center gap-1.5 text-muted">View on explorer <ExternalLink size={13} /></span>
@@ -371,12 +373,12 @@ export function AgentApprove({ state, request }: { state: WalletState; request: 
         <div className="flex items-center justify-between gap-2">
           <div>
             <div className="text-xs text-muted">{s ? 'Swap' : 'Pay'}</div>
-            <div className="font-mono text-[22px] font-medium leading-tight">{fmt(amount, s ? 2 : decimals)} {symbol}</div>
+            <div className="font-mono text-[22px] font-medium leading-tight">{amountText} {symbol}</div>
           </div>
           <ArrowRight size={18} className="text-muted" />
           <div className="text-right">
             <div className="text-xs text-muted">{s ? 'For at least' : 'To'}</div>
-            <div className="font-mono text-sm">{s ? `${formatUnits(s.amountOutMinimum, s.tokenOut.decimals)} ${s.tokenOut.symbol}` : shortAddr(request.to)}</div>
+            <div className="font-mono text-sm">{s ? `${fmtExact(s.amountOutMinimum, s.tokenOut.decimals, Math.min(decimalsFor(state.assets, s.tokenOut.symbol), 4))} ${s.tokenOut.symbol}` : shortAddr(request.to)}</div>
           </div>
         </div>
         <div>
