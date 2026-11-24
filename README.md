@@ -2,6 +2,8 @@
 
 _This is the EVM version, for Robinhood Chain and Arbitrum. The Solana mobile wallet is [haptix-mobile-app](https://github.com/ritesh59697/haptix-mobile-app)._
 
+**Overview page:** [haptixwallet.xyz/evm.html](https://haptixwallet.xyz/evm.html)
+
 Haptix lets a developer give an AI agent real spending power without giving it the user's wallet.
 
 The user's account is an ERC-4337 smart account controlled by two passkeys. An agent gets its own key and a budget. The account contract enforces that budget on every operation:
