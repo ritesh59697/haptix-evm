@@ -30,6 +30,8 @@ const agent = createHaptixAgent({
   account: process.env.HAPTIX_ACCOUNT as `0x${string}`,
   agentKey: process.env.HAPTIX_AGENT_KEY as `0x${string}`,
   chainId: Number(process.env.CHAIN_ID), // optional: refuse any other chain
+  // optional: how messages name the native currency (default ETH, 18 decimals)
+  nativeCurrency: { symbol: process.env.NATIVE_SYMBOL!, decimals: 18 },
 });
 ```
 
@@ -77,6 +79,8 @@ if (out.status === 'done') {
 |---|---|
 | `done` | Sent with the agent's key alone and included on chain. Includes `transactionHash`. |
 | `needs-approval` | Over the per-payment limit (`reason: 'per-payment-limit'`) or the rolling budget (`reason: 'budget'`). Includes `request` for the user. |
+
+`message` says why in the asset's own units, read from the token: for example `100 dUSD is more than the 0 dUSD left of the 200 dUSD budget.`
 
 Anything the user's approval wouldn't fix throws a `HaptixAgentError`. A failure talking to the node itself (a timeout, a bad URL) throws an `RpcError` instead. A `HaptixAgentError`'s `code` is one of:
 

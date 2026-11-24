@@ -19,6 +19,12 @@ export const entryPointAbi = parseAbi([
   'function getNonce(address sender, uint192 key) view returns (uint256)',
 ]);
 
+/** A token's display units, for messages. */
+export const erc20MetaAbi = parseAbi([
+  'function decimals() view returns (uint8)',
+  'function symbol() view returns (string)',
+]);
+
 export const userOperationEvent = parseAbiItem(
   'event UserOperationEvent(bytes32 indexed userOpHash, address indexed sender, address indexed paymaster, uint256 nonce, bool success, uint256 actualGasCost, uint256 actualGasUsed)',
 );

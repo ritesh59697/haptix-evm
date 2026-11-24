@@ -19,8 +19,8 @@
  *
  * Exit codes: 0 done, 3 needs the owner (request printed), 1 refused or failed, 2 usage.
  */
-import { formatUnits, getAddress, parseAbi, parseEther, parseUnits, createPublicClient, http } from 'viem';
-import { createHaptixAgent, ETH, HaptixAgentError } from '../agent-sdk/dist/index.js';
+import { formatUnits, getAddress, parseAbi, parseUnits, createPublicClient, http } from 'viem';
+import { createHaptixAgent, DEFAULT_NATIVE_CURRENCY, ETH, HaptixAgentError } from '../agent-sdk/dist/index.js';
 
 const need = (k) => {
   const v = process.env[k];
@@ -37,6 +37,10 @@ if (isSwap ? args.length !== 5 : args.length !== 2) {
   process.exit(2);
 }
 
+// The network files name the chain's native currency; messages use it.
+const native = process.env.NATIVE_SYMBOL
+  ? { ...DEFAULT_NATIVE_CURRENCY, symbol: process.env.NATIVE_SYMBOL }
+  : DEFAULT_NATIVE_CURRENCY;
 const agent = createHaptixAgent({
   rpcUrl: need('RPC_URL'),
   bundlerUrl: need('BUNDLER_URL'),
@@ -44,6 +48,7 @@ const agent = createHaptixAgent({
   account: need('HAPTIX_ACCOUNT'),
   agentKey: need('HAPTIX_AGENT_KEY'),
   chainId: Number(need('CHAIN_ID')),
+  nativeCurrency: native,
 });
 const client = createPublicClient({ transport: http(need('RPC_URL')) });
 const erc20 = parseAbi(['function decimals() view returns (uint8)', 'function symbol() view returns (string)']);
@@ -68,9 +73,9 @@ if (isSwap) {
   [asset, unit, symbol] = [tokenIn, tin.decimals, tin.symbol];
   describe = `swapping ${amountArg} ${tin.symbol} for at least ${minOutArg} ${tout.symbol}`;
 } else {
-  action = { kind: 'pay', to: getAddress(args[0]), amount: parseEther(args[1]) };
-  [asset, unit, symbol] = [ETH, 18, 'ETH'];
-  describe = `paying ${args[1]} ETH to ${action.to}`;
+  action = { kind: 'pay', to: getAddress(args[0]), amount: parseUnits(args[1], native.decimals) };
+  [asset, unit, symbol] = [ETH, native.decimals, native.symbol];
+  describe = `paying ${args[1]} ${native.symbol} to ${action.to}`;
 }
 
 try {

@@ -1,10 +1,10 @@
 import {
   concatHex, decodeEventLog, decodeFunctionResult, encodeAbiParameters, encodeEventTopics, encodeFunctionData,
-  getAddress, toHex, zeroAddress, type Address, type Hex,
+  formatUnits, getAddress, toHex, zeroAddress, type Address, type Hex,
 } from 'viem';
 import { privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
 import {
-  accountAbi, AGENT_SIG, entryPointAbi, ESCALATED_SIG, SIG_TYPE_AGENT, SWAP_SELECTOR, swapAbi, userOperationEvent,
+  accountAbi, AGENT_SIG, entryPointAbi, erc20MetaAbi, ESCALATED_SIG, SIG_TYPE_AGENT, SWAP_SELECTOR, swapAbi, userOperationEvent,
 } from './abi.js';
 import { encodeRequest, type ApprovalRequest, type RequestUserOp } from './request.js';
 import { rpc, RpcError, type Fetch } from './rpc.js';
@@ -24,6 +24,15 @@ export interface GasMargins {
   /** maxFeePerGas = base fee × this / 100 + priority fee, when the bundler doesn't price it. */
   baseFeePercent: number;
 }
+
+/** How messages show an amount: a symbol, and decimals (null: the token wouldn't say, so base units). */
+export interface Unit {
+  symbol: string;
+  decimals: number | null;
+}
+
+/** The native currency of Robinhood Chain and Arbitrum. Set nativeCurrency for another chain. */
+export const DEFAULT_NATIVE_CURRENCY: Unit = { symbol: 'ETH', decimals: 18 };
 
 /** Margins on the bundler's estimates. These worked on Robinhood Chain testnet; override per chain if needed. */
 export const DEFAULT_GAS_MARGINS: GasMargins = {
@@ -46,6 +55,8 @@ export interface HaptixAgentConfig {
   /** If set, every call first checks the node reports this chain. */
   chainId?: number;
   gas?: Partial<GasMargins>;
+  /** How messages name the chain's native currency. Default: DEFAULT_NATIVE_CURRENCY. */
+  nativeCurrency?: { symbol: string; decimals: number };
   /** How often waitForOperation polls, and for how long. */
   pollIntervalMs?: number;
   timeoutMs?: number;
@@ -181,6 +192,9 @@ export class HaptixAgent {
   private readonly margins: GasMargins;
   private readonly pollIntervalMs: number;
   private readonly timeoutMs: number;
+  private readonly native: Unit;
+  /** Token units already read, so each token is asked once. */
+  private readonly units = new Map<Address, Unit>();
   private chainChecked: number | null = null;
 
   constructor(private readonly config: HaptixAgentConfig) {
@@ -195,6 +209,7 @@ export class HaptixAgent {
     this.margins = { ...DEFAULT_GAS_MARGINS, ...config.gas };
     this.pollIntervalMs = config.pollIntervalMs ?? 2_000;
     this.timeoutMs = config.timeoutMs ?? 120_000;
+    this.native = config.nativeCurrency ?? DEFAULT_NATIVE_CURRENCY;
   }
 
   // --- Reading ------------------------------------------------------------------------
@@ -257,7 +272,7 @@ export class HaptixAgent {
         this.read(accountAbi, this.account, 'agentAllowedProtocols', [this.address, to]),
         this.read(accountAbi, this.account, 'isAllowedRecipient', [to]),
       ]);
-      if (!b.allowed) throw new HaptixAgentError('not-allowed', 'This agent may not spend ETH.');
+      if (!b.allowed) throw new HaptixAgentError('not-allowed', `This agent may not spend ${this.native.symbol}.`);
       if (!protocol && !recipient) throw new HaptixAgentError('not-allowed', `This agent may not pay ${to}.`);
     } else {
       const router = getAddress(action.router);
@@ -267,21 +282,21 @@ export class HaptixAgent {
         this.read(accountAbi, this.account, 'agentAllowedTokens', [this.address, getAddress(action.tokenOut)]),
       ]);
       if (!protocol || !selector) throw new HaptixAgentError('not-allowed', `This agent may not trade through ${router}.`);
-      if (!b.allowed) throw new HaptixAgentError('not-allowed', `This agent may not spend ${asset}.`);
-      if (!outAllowed) throw new HaptixAgentError('not-allowed', `This agent may not buy ${getAddress(action.tokenOut)}.`);
+      if (!b.allowed) throw new HaptixAgentError('not-allowed', `This agent may not spend ${await this.nameOf(asset)}.`);
+      if (!outAllowed) throw new HaptixAgentError('not-allowed', `This agent may not buy ${await this.nameOf(getAddress(action.tokenOut))}.`);
     }
 
-    let limit: { reason: LimitReason; message: string } | null = null;
-    if (amount > b.perPayment) {
-      limit = { reason: 'per-payment-limit', message: `${amount} is over the per-payment limit of ${b.perPayment}.` };
-    } else if (b.windowCap !== 0n && b.spent + amount > b.windowCap) {
-      limit = { reason: 'budget', message: `${amount} is more than the ${b.remaining} left of the budget of ${b.windowCap}.` };
-    }
-    if (!limit) return { decision: 'within' };
+    const overPayment = amount > b.perPayment;
+    const overBudget = b.windowCap !== 0n && b.spent + amount > b.windowCap;
+    if (!overPayment && !overBudget) return { decision: 'within' };
+    const unit = await this.unitOf(asset);
+    const show = (v: bigint) => formatAmount(v, unit);
     if (b.approvalCeiling !== 0n && amount > b.approvalCeiling) {
-      throw new HaptixAgentError('above-approval-ceiling', `${amount} is above ${b.approvalCeiling}, the most the owner can approve for this agent.`);
+      throw new HaptixAgentError('above-approval-ceiling', `${show(amount)} is above ${show(b.approvalCeiling)}, the most the owner can approve for this agent.`);
     }
-    return { decision: 'needs-approval', ...limit };
+    return overPayment
+      ? { decision: 'needs-approval', reason: 'per-payment-limit', message: `${show(amount)} is over the per-payment limit of ${show(b.perPayment)}.` }
+      : { decision: 'needs-approval', reason: 'budget', message: `${show(amount)} is more than the ${show(b.remaining ?? 0n)} left of the ${show(b.windowCap)} budget.` };
   }
 
   // --- Acting -------------------------------------------------------------------------
@@ -315,7 +330,7 @@ export class HaptixAgent {
         if (again.decision === 'needs-approval') return this.needsApproval(prepared, again);
       }
       if (e instanceof RpcError && /AA21/.test(e.message)) {
-        throw new HaptixAgentError('insufficient-funds', 'The account doesn\'t hold enough ETH to pay for this operation\'s gas.', e);
+        throw new HaptixAgentError('insufficient-funds', `The account doesn't hold enough ${this.native.symbol} to pay for this operation's gas.`, e);
       }
       throw new HaptixAgentError('bundler-rejected', `The bundler refused the operation: ${(e as Error).message}`, e);
     }
@@ -498,6 +513,34 @@ export class HaptixAgent {
     return { maxFeePerGas: (base * BigInt(this.margins.baseFeePercent)) / 100n + priority, maxPriorityFeePerGas: priority };
   }
 
+  /**
+   * An asset's symbol and decimals, read from the token, for messages. A token that won't
+   * give its decimals is shown in base units; one with no readable symbol, by its address.
+   */
+  private async unitOf(asset: Address): Promise<Unit> {
+    if (asset === ETH) return this.native;
+    const known = this.units.get(asset);
+    if (known) return known;
+    const [decimals, symbol] = await Promise.allSettled([
+      this.read(erc20MetaAbi, asset, 'decimals', []),
+      this.read(erc20MetaAbi, asset, 'symbol', []),
+    ]);
+    // The symbol is whatever the token's contract returns, and agents often hand messages to a
+    // model: use it only if it looks like a symbol, else name the token by its address.
+    const raw = symbol.status === 'fulfilled' ? String(symbol.value).trim() : '';
+    const name = PLAIN_SYMBOL.test(raw) ? raw : asset;
+    const unit: Unit = { symbol: name, decimals: decimals.status === 'fulfilled' ? Number(decimals.value) : null };
+    // Keep only a full answer: a read that failed now (a node hiccup) may work next time.
+    if (decimals.status === 'fulfilled' && symbol.status === 'fulfilled') this.units.set(asset, unit);
+    return unit;
+  }
+
+  /** "dUSD (0x…)" for a token with a symbol, the address alone otherwise; the native symbol for ETH. */
+  private async nameOf(asset: Address): Promise<string> {
+    const { symbol } = await this.unitOf(asset);
+    return symbol === asset || asset === ETH ? symbol : `${symbol} (${asset})`;
+  }
+
   private block() {
     return rpc<Block>(this.fetchFn, this.config.rpcUrl, 'eth_getBlockByNumber', ['latest', false]);
   }
@@ -522,6 +565,14 @@ export class HaptixAgent {
 }
 
 const min = (a: bigint, b: bigint) => (a < b ? a : b);
+
+/** What a token symbol may look like in a message: short, no spaces or control characters. */
+const PLAIN_SYMBOL = /^[\p{L}\p{N}\p{Sc}._+-]{1,24}$/u;
+
+/** "100 dUSD", or "100 base units of 0x…" when the token's decimals are unknown. */
+function formatAmount(value: bigint, unit: Unit): string {
+  return unit.decimals === null ? `${value} base units of ${unit.symbol}` : `${formatUnits(value, unit.decimals)} ${unit.symbol}`;
+}
 
 function validate(action: Action) {
   const amount = action.kind === 'pay' ? action.amount : action.amountIn;
