@@ -74,7 +74,11 @@ interface WalletApi {
   /** Hand a both-key send to the side panel, which stays open during the second-key prompt. */
   handOffToPanel: (send: Omit<PendingSend, 'createdAt'>, windowId: number) => void;
   takePendingSend: () => Promise<PendingSend | null>;
+  /** The bundler in use: the owner's own if saved, otherwise the network's default. */
   bundlerUrl: string;
+  /** True when the owner saved their own bundler URL. */
+  customBundler: boolean;
+  /** Save the owner's bundler URL; an empty string goes back to the default. */
   setBundlerUrl: (url: string) => Promise<void>;
   explorerTx: (hash: string) => string;
   explorerAddress: (addr: string) => string;
@@ -255,6 +259,7 @@ export function WalletProvider({ children, useSample = false }: { children: Reac
   const [state, setState] = useState<WalletState | null>(useSample ? sample : null);
   const [draftKeys, setDraftKeys] = useState<StoredKey[]>([]);
   const [bundlerUrl, setBundler] = useState('');
+  const effectiveBundler = bundlerUrl || network.defaultBundlerUrl || '';
   const [dappRequests, setDappRequests] = useState<DappRequest[]>([]);
   const [sites, setSites] = useState<Sites>({});
   const [restore, setRestore] = useState<RestoreDraft | null>(null);
@@ -273,7 +278,7 @@ export function WalletProvider({ children, useSample = false }: { children: Reac
     setAccount(acct ?? null);
     setDraftKeys(draft?.keys ?? []);
     setBundler(url ?? '');
-    setState(acct ? await buildState(acct, url ?? '') : null);
+    setState(acct ? await buildState(acct, url || network.defaultBundlerUrl || '') : null);
     setLoading(false);
   }, [useSample]);
 
@@ -380,9 +385,15 @@ export function WalletProvider({ children, useSample = false }: { children: Reac
       await removeItem(storeKeys.pendingSend(chainId));
       return Date.now() - p.createdAt > PENDING_SEND_TTL_MS ? null : p;
     },
-    bundlerUrl,
+    bundlerUrl: effectiveBundler,
+    customBundler: !!bundlerUrl,
     setBundlerUrl: async (url) => {
       const u = url.trim();
+      if (!u) {
+        await removeItem(storeKeys.bundlerUrl(chainId));
+        setBundler('');
+        return;
+      }
       // Check it answers, accepts the key, and serves this chain before saving it.
       let served: string;
       try {
@@ -484,8 +495,8 @@ export function WalletProvider({ children, useSample = false }: { children: Reac
     },
     approveAgentRequest: async (req, onSigning) => {
       if (!account) throw new Error('Set up the wallet first.');
-      if (!bundlerUrl) throw new Error('Add a bundler URL in Security first.');
-      const userOpHash = await approveAgentRequest(req, account, bundlerUrl, onSigning);
+      if (!effectiveBundler) throw new Error('Add a bundler URL in Security first.');
+      const userOpHash = await approveAgentRequest(req, account, effectiveBundler, onSigning);
       const name = state?.agents.find((a) => a.address && getAddress(a.address) === getAddress(req.payload.agent))?.name ?? 'Agent';
       const base = {
         detail: name,
@@ -495,7 +506,7 @@ export function WalletProvider({ children, useSample = false }: { children: Reac
       await upsertActivity({ id: userOpHash, title: 'Confirming', status: 'pending', ts: Date.now(), ...base });
       const deadline = Date.now() + 120_000;
       while (Date.now() < deadline) {
-        const r = await rpcCall<{ success: boolean; receipt: { transactionHash: Hex } } | null>(bundlerUrl, 'eth_getUserOperationReceipt', [userOpHash]);
+        const r = await rpcCall<{ success: boolean; receipt: { transactionHash: Hex } } | null>(effectiveBundler, 'eth_getUserOperationReceipt', [userOpHash]);
         if (r) {
           await upsertActivity({ id: userOpHash, title: r.success ? 'Agent payment approved' : 'Agent payment failed', status: r.success ? 'ok' : 'failed', ts: Date.now(), txHash: r.receipt.transactionHash, ...base });
           await refresh();
@@ -607,7 +618,7 @@ export function WalletProvider({ children, useSample = false }: { children: Reac
     callData?: Hex; amountLabel?: string;
   }) {
     if (useSample || !account) throw new NotWiredError('Sending in sample mode');
-    if (!bundlerUrl) throw new Error('Add a bundler URL in Security first.');
+    if (!effectiveBundler) throw new Error('Add a bundler URL in Security first.');
     const base = {
       detail: o.detail,
       amount: o.amountLabel ?? (o.valueWei ? `−${formatEther(o.valueWei)} ${network.nativeSymbol}` : ''),
@@ -620,7 +631,7 @@ export function WalletProvider({ children, useSample = false }: { children: Reac
       data: o.data,
       callData: o.callData,
       signerIds: o.signerIds,
-      bundlerUrl,
+      bundlerUrl: effectiveBundler,
       onStep: (s) => {
         // Record it the moment the bundler has it, so a closed window can't lose it.
         if (s.stage === 'confirming') {

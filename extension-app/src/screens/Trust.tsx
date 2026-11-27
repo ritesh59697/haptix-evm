@@ -79,8 +79,9 @@ function describeUrl(url: string) {
 function BundlerField() {
   const w = useWallet();
   const nav = useNav();
-  const [value, setValue] = useState(w.bundlerUrl);
-  const dirty = value.trim() !== w.bundlerUrl;
+  const saved = w.customBundler ? w.bundlerUrl : '';
+  const [value, setValue] = useState(saved);
+  const dirty = value.trim() !== saved;
   return (
     <div className="mt-4 flex flex-col gap-1.5">
       <label htmlFor="bundler" className="text-xs text-muted">Bundler URL</label>
@@ -95,12 +96,22 @@ function BundlerField() {
           placeholder={`https://…/${network.chainId}/rpc?apikey=…`}
           className="h-10 min-w-0 flex-1 rounded-btn border border-line bg-card px-3 font-mono text-[11px] text-fg outline-none placeholder:text-faint focus:border-accent"
         />
-        <Btn size="sm" className="h-10" disabled={!dirty} onClick={() => nav.run(() => w.setBundlerUrl(value), 'Bundler URL saved')}>Save</Btn>
+        <Btn size="sm" className="h-10" disabled={!dirty} onClick={() => nav.run(() => w.setBundlerUrl(value), value.trim() ? 'Bundler URL saved' : 'Back to the default bundler')}>Save</Btn>
       </div>
       <span className="text-[11px] leading-snug text-muted">
-        {w.bundlerUrl ? `Saved: ${describeUrl(w.bundlerUrl)}. ` : 'Not set. '}
-        Sends go through this ERC-4337 bundler for {network.name}. It's stored only in this browser, and Save checks it first.
+        {w.customBundler
+          ? `Using yours: ${describeUrl(w.bundlerUrl)}. `
+          : network.defaultBundlerUrl
+            ? `Using ${describeUrl(network.defaultBundlerUrl)}: no key needed, but rate-limited. Paste your own URL to use it instead. `
+            : 'Not set. Sends need an ERC-4337 bundler for this network. '}
+        Yours stays in this browser, and Save checks it first.
       </span>
+      {w.customBundler && network.defaultBundlerUrl && (
+        <button type="button" className="self-start text-[11px] text-accent-text underline-offset-2 hover:underline"
+          onClick={() => { setValue(''); nav.run(() => w.setBundlerUrl(''), 'Back to the default bundler'); }}>
+          Use the default instead
+        </button>
+      )}
     </div>
   );
 }

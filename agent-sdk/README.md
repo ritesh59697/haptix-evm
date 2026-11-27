@@ -134,8 +134,10 @@ The margins on those estimates are in `DEFAULT_GAS_MARGINS`, and you can overrid
   - refused while frozen, and refused after revoke.
 - **Through the real extension** (`tools/test-dapp/full-flow.mjs`, 33 checks, 2026-11-21): `agent-pay.mjs`, built on this SDK, trades within budget, then stops and prints a request. The Haptix extension reads that request, shows it, and approves it with both passkeys (virtual passkeys in a headless browser). After revoke, the SDK refuses with `revoked`.
 
+- **With real passkeys and a hosted bundler** (2026-11-26, Pimlico): `agent-pay.mjs` traded twice within budget, stopped at the budget and printed a request that the owner approved in the extension with Touch ID and a phone passkey, then refused after revoke. Receipts are in the [main README](../README.md#receipts).
+
 Not yet tested:
-- a hosted bundler (Pimlico or Alchemy);
+- Alchemy's bundler;
 - Robinhood Chain mainnet;
 - a wait of hours: paging through a long block range is covered by the unit tests only.
 

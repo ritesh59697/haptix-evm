@@ -18,6 +18,7 @@ function readNetwork() {
   }
   return {
     name: env.NETWORK_NAME,
+    shortName: env.NETWORK_SHORT_NAME || env.NETWORK_NAME,
     chainId: Number(env.CHAIN_ID),
     nativeSymbol: env.NATIVE_SYMBOL,
     rpcUrl: env.RPC_URL,
@@ -27,6 +28,8 @@ function readNetwork() {
     // Optional: tokens the wallet shows and the router agents may trade through.
     tokens: (env.WALLET_TOKENS ?? '').split(',').map((t) => t.trim()).filter(Boolean),
     swapRouter: env.SWAP_ROUTER || null,
+    // Optional: the bundler used until the owner saves their own.
+    defaultBundlerUrl: env.DEFAULT_BUNDLER_URL || null,
   };
 }
 

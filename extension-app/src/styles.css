@@ -1,8 +1,8 @@
-@import '@fontsource/ibm-plex-sans/400.css';
-@import '@fontsource/ibm-plex-sans/500.css';
-@import '@fontsource/ibm-plex-sans/600.css';
-@import '@fontsource/ibm-plex-mono/400.css';
-@import '@fontsource/ibm-plex-mono/500.css';
+@import '@fontsource/geist-sans/400.css';
+@import '@fontsource/geist-sans/500.css';
+@import '@fontsource/geist-sans/600.css';
+@import '@fontsource/geist-mono/400.css';
+@import '@fontsource/geist-mono/500.css';
 
 @tailwind base;
 @tailwind components;
@@ -17,7 +17,7 @@
     --raised: 236 236 232;
     --line: 220 220 214;
     --hair: 232 232 227;
-    --faint: 178 178 171;
+    --faint: 154 156 162;
     --fg: 23 24 26;
     --muted: 95 97 104;
     --accent: 255 90 31;
@@ -32,12 +32,12 @@
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme='light']) {
       color-scheme: dark;
-      --bg: 20 21 23;
-      --card: 29 31 34;
-      --raised: 37 39 43;
-      --line: 48 50 55;
-      --hair: 33 35 38;
-      --faint: 82 84 90;
+      --bg: 24 24 24;
+      --card: 31 31 31;
+      --raised: 39 39 39;
+      --line: 49 49 49;
+      --hair: 36 36 36;
+      --faint: 110 112 118;
       --fg: 237 237 234;
       --muted: 160 162 168;
       --accent: 255 106 51;
@@ -52,12 +52,12 @@
 
   :root[data-theme='dark'] {
     color-scheme: dark;
-    --bg: 20 21 23;
-    --card: 29 31 34;
-    --raised: 37 39 43;
-    --line: 48 50 55;
-    --hair: 33 35 38;
-    --faint: 82 84 90;
+    --bg: 24 24 24;
+    --card: 31 31 31;
+    --raised: 39 39 39;
+    --line: 49 49 49;
+    --hair: 36 36 36;
+    --faint: 110 112 118;
     --fg: 237 237 234;
     --muted: 160 162 168;
     --accent: 255 106 51;

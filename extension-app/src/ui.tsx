@@ -2,17 +2,15 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { Activity, ChevronLeft, Cpu, Shield, Wallet } from 'lucide-react';
 import type { Approver } from './data/sample';
 import { useNav } from './nav';
+import markUrl from './assets/haptix-mark.svg';
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
 
+/** The Haptix mark (the same file the website uses), drawn in the current text color. */
 export function Logo({ size = 22 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 22 22" aria-hidden="true">
-      <rect width="22" height="22" rx="5" fill="rgb(var(--fg))" />
-      <path d="M7 6v10M15 6v10M7 11.5c2.5-2 5.5-2 8 0" stroke="rgb(var(--bg))" strokeWidth="2" strokeLinecap="round" fill="none" />
-      <circle cx="17.5" cy="4.5" r="2.5" fill="rgb(var(--accent))" />
-    </svg>
-  );
+  // Quoted: Vite inlines small SVGs as data URLs, which break an unquoted url().
+  const mask = `url("${markUrl}") center / contain no-repeat`;
+  return <span aria-hidden="true" className="inline-block shrink-0 bg-current" style={{ width: size, height: size, mask, WebkitMask: mask }} />;
 }
 
 type Variant = 'primary' | 'both' | 'outline' | 'ghost';

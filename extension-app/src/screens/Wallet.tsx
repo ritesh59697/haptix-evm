@@ -35,7 +35,7 @@ function NetworkPill() {
   return (
     <span className="flex h-8 min-w-0 items-center gap-1.5 rounded-btn border border-line bg-card px-2.5 font-mono text-[11px] text-muted" title={`${network.name} (${network.chainId})`}>
       <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
-      <span className="truncate whitespace-nowrap">{network.name}</span>
+      <span className="truncate whitespace-nowrap">{network.shortName}</span>
     </span>
   );
 }

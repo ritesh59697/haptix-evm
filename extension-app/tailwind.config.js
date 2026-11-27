@@ -26,8 +26,9 @@ export default {
         'on-both': v('on-both'),
       },
       fontFamily: {
-        sans: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
-        mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
+        // Same typefaces as the website (haptixwallet.xyz).
+        sans: ['"Geist Sans"', 'system-ui', 'sans-serif'],
+        mono: ['"Geist Mono"', 'ui-monospace', 'monospace'],
       },
       borderRadius: {
         btn: '10px',

@@ -31,7 +31,7 @@ export function Welcome() {
           <Logo />
           <span className="text-[15px] font-semibold tracking-tight">Haptix</span>
         </div>
-        <span className="rounded-md border border-line bg-card px-2 py-1 font-mono text-[11px] text-muted">{network.name}</span>
+        <span className="rounded-md border border-line bg-card px-2 py-1 font-mono text-[11px] text-muted">{network.shortName}</span>
       </div>
 
       <div className="grid-paper relative mt-4 flex h-[150px] items-center justify-center rounded-card border border-line bg-card">

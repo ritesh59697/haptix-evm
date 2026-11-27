@@ -90,7 +90,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-To try it by hand, load `extension-app/dist` as an unpacked extension in `chrome://extensions`. Then set a bundler URL for Robinhood Chain testnet under Security; any ERC-4337 v0.7 bundler works. Passkeys are real, and the account is a real testnet account.
+To try it by hand, load `extension-app/dist` as an unpacked extension in `chrome://extensions`. It uses Pimlico's public bundler endpoint by default, which needs no API key but is rate-limited; the URL is in [`networks/`](networks). To use your own ERC-4337 v0.7 bundler, paste its URL under Security. Passkeys are real, and the account is a real testnet account.
 
 ### Live runs
 
@@ -137,7 +137,15 @@ The EntryPoint is the canonical v0.7 `0x0000000071727De22E5E9d8BAf0edAc6f37da032
 
 All on Robinhood Chain testnet unless noted.
 
-**Real passkeys, through the extension and a hosted bundler** (2026-11-05):
+**Real passkeys, every feature, current factory** (2026-11-26). Touch ID as key 1, an Android phone over QR as key 2, so the two keys sit in different password managers. Every operation went through Pimlico's hosted bundler, the agent's included. The passkey count is the number of WebAuthn signatures in each operation's calldata:
+- [0.0001 ETH send, which also deployed the account](https://explorer.testnet.chain.robinhood.com/tx/0x02fc4f3bd5742db48397bef873c821ff6df4f181b995df90c437ea0576541ffd): Touch ID alone.
+- [10 dUSD send](https://explorer.testnet.chain.robinhood.com/tx/0xbf5cfbaf74048c147b2c3c33b4b76c3cff43f0c54ec63a0e96f4596c5ec3af4a): both passkeys.
+- [Grant an agent a trade budget](https://explorer.testnet.chain.robinhood.com/tx/0x9505faa63f86aeef070cb25464db2ff4194a473204fb9971cad1c9bf51f62e0c) (200 dUSD per 24h, 100 per trade): both passkeys.
+- Agent trades with `agent-pay.mjs`, the agent key alone: [1](https://explorer.testnet.chain.robinhood.com/tx/0x798c74551e77bead60654ec8626beb525c401d286b832d0dc1ad74f6fcfe052f), [2](https://explorer.testnet.chain.robinhood.com/tx/0x1813e0f2e77bbab6208908a0ca3bd25248fe196b850f4051ff14a47e7866022e).
+- A third trade, over the budget: the SDK stopped and printed a request. [Pasted into the extension and approved](https://explorer.testnet.chain.robinhood.com/tx/0xebe6ba5232588e238b5fd2526138d492eb030dc37ea85c2a5a2baa9b92022bb5): the agent key and both passkeys.
+- [Freeze](https://explorer.testnet.chain.robinhood.com/tx/0xc42dbf47040645ff7ce10f5009067e177335547b425891a1db6c1019ad3ba041) with one passkey, [unfreeze](https://explorer.testnet.chain.robinhood.com/tx/0x678d86b61b9a7d8f79ce91ae1fc2332b406c9bc930ff5d5106c837ea7d9f2463) and [revoke](https://explorer.testnet.chain.robinhood.com/tx/0x9753441fc6d2467e8b243cff60b04f21e04cf4dd392e2a106dab763ff84c24cf) with both. After revoke, the SDK refused a trade without sending it.
+
+**Real passkeys, first sends** (2026-11-05, earlier factory):
 - [Account created, and 0.0005 ETH sent with Touch ID alone](https://explorer.testnet.chain.robinhood.com/tx/0xee4c69691251647bb703c9dfcb4913a508376a2cd9a3803a3621fb398e4142d6).
 - [0.0015 ETH, over the 0.001 limit, signed with Touch ID and a phone passkey](https://explorer.testnet.chain.robinhood.com/tx/0x2a59df18193f0cd03645f2723e27522d19f5e9130526aa7b945d781122063e63).
 
@@ -170,7 +178,7 @@ All on Robinhood Chain testnet unless noted.
 - [Guardian starts recovery](https://explorer.testnet.chain.robinhood.com/tx/0x4d30cd44db7345169e4839fb9864b6f2eadc1e3a3e07cf010711801d513230b7). An early finish was refused.
 - [Owner cancels with one key](https://explorer.testnet.chain.robinhood.com/tx/0x4ecfa2e326c1eaf8789bd3cb635e790452e2fc79152cde663cb45d3e84f42352).
 
-The spend-limit, trade and agent SDK receipts come from an account made by the current factory. The real-passkey sends, agent payments and guardian receipts come from accounts made by the earlier factory, `0x60319237…146d`. The 2026-11-09 redeploy changed only how signed messages are checked (ERC-1271). Accounts from the earlier factory keep the old one-key rule for signed messages, and the wallet warns about it. The scripts use software P-256 keys that produce real WebAuthn assertions, so the contract runs the same verification path as for Touch ID.
+The 2026-11-26 real-passkey run and the spend-limit, trade and agent SDK receipts come from accounts made by the current factory, `0xCd12906D…5980`. The 2026-11-05 real-passkey sends, agent payments and guardian receipts come from accounts made by the earlier factory, `0x60319237…146d`. The 2026-11-09 redeploy changed only how signed messages are checked (ERC-1271). Accounts from the earlier factory keep the old one-key rule for signed messages, and the wallet warns about it. The scripts use software P-256 keys that produce real WebAuthn assertions, so the contract runs the same verification path as for Touch ID.
 
 ## Limits
 
@@ -178,10 +186,11 @@ The spend-limit, trade and agent SDK receipts come from an account made by the c
 - **Accounts can't be upgraded.** They are ERC-1167 clones with no admin key. A fix means a new factory, and users moving to a new account.
 - **Two keys can't be proven to be on two devices.** Passkey providers don't attest where a key lives, and two keys that sync through one password manager are both on every device it syncs to. The wallet detects synced keys at setup and warns. A security key avoids it.
 - **One key can sign a `personal_sign` message.** A site that treats such a message as authorization gets one-key security.
-- **Real-passkey testing is partial.** Real Touch ID and phone passkeys were used for sends (above). The agent, guardian, signing and site screens have been tested with virtual passkeys and a local bundler only.
+- **Some screens have only been tested with virtual passkeys.** Sends, agent budgets, approvals, freeze and revoke ran with real passkeys (above). Guardian recovery, restoring on a second device, signing and site connections have been tested with virtual passkeys and a local bundler only.
+- **The default bundler hasn't sent a real operation yet.** The real-passkey run used Pimlico's hosted bundler with an API key. The keyless public endpoint answered every read check for both chains, but is rate-limited.
 - **Trading uses a demo router.** No Uniswap deployment is documented on Robinhood Chain testnet, so trades run against [`script/demo/DemoDex.sol`](script/demo/DemoDex.sol) at a fixed price.
 - **No gas sponsorship yet.** The account pays its own gas.
-- **The agent SDK isn't on npm** and has run only through a local test bundler, not a hosted one.
+- **The agent SDK isn't on npm.**
 
 ## License
 

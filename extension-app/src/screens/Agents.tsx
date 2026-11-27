@@ -88,12 +88,13 @@ export function Agents({ state }: { state: WalletState }) {
     <div className="flex h-full flex-col">
       <div className="flex items-end justify-between px-4 pt-3.5">
         <PageTitle>Agents</PageTitle>
-        <div className="flex gap-1.5">
-          <Btn variant="outline" size="sm" className="h-9" aria-label="Paste an agent request" onClick={() => open({ name: 'agentPaste' })}><ClipboardPaste size={14} /></Btn>
-          <Btn size="sm" className="h-9" onClick={() => open({ name: 'newBudget' })}><Plus size={14} strokeWidth={2.5} />New budget</Btn>
-        </div>
+        <Btn size="sm" className="h-9" onClick={() => open({ name: 'newBudget' })}><Plus size={14} strokeWidth={2.5} />New budget</Btn>
       </div>
       <p className="m-0 mx-4 mt-2 text-xs leading-normal text-muted">Each agent spends from its own budget, enforced by the contract. Anything more needs both of your keys.</p>
+      <button type="button" onClick={() => open({ name: 'agentPaste' })}
+        className="mx-4 mt-2 flex items-center gap-1.5 self-start rounded-btn text-xs font-medium text-accent-text hover:underline">
+        <ClipboardPaste size={13} aria-hidden="true" />Agent stopped by its budget? Paste its request
+      </button>
       <main className="no-scrollbar flex flex-1 flex-col gap-2 overflow-y-auto px-4 pb-3 pt-3.5">
         {state.agents.length === 0 && <p className="text-sm text-muted">No agents yet. Give one a budget to let it pay without asking.</p>}
         {[...active, ...ended].map((a) => <AgentCard key={a.id} agent={a} decimals={Math.min(decimalsFor(state.assets, a.token), 4)} />)}

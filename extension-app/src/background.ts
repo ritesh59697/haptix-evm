@@ -24,6 +24,22 @@ class ProviderRpcError extends Error {
 
 const account = async () => (await getItem<Account>(keys.account(net.chainId)))?.address;
 
+/**
+ * What the toolbar icon opens. Before there is an account it opens the side panel, because
+ * the popup closes during the second key's prompt (a phone QR code or a security key).
+ * Once the account exists it opens
+ * the popup again, which sites' requests also use.
+ */
+async function syncActionMode() {
+  const hasAccount = !!(await account());
+  await chrome.action.setPopup({ popup: hasAccount ? 'index.html' : '' });
+  await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: !hasAccount });
+}
+void syncActionMode();
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && keys.account(net.chainId) in changes) void syncActionMode();
+});
+
 async function connected(origin: string): Promise<Address | null> {
   const [addr, sites] = await Promise.all([account(), connectedSites()]);
   return addr && sites[origin] ? addr : null;
